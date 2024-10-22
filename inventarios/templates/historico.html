@@ -1,0 +1,23 @@
+{% extends 'comercialbase.html' %}
+{% load django_tables2 %}
+{% block content %}
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/historico2.css' %}"/>
+    <div class="container">
+        <h1 class="text-center">Historico De Movimientos General (Registros)</h1>
+        <form method="get" class="d-flex justify-content-center mb-3">
+            <input type="text" name="item_busqueda" placeholder="Buscar Referencia..." class="form-control w-25"/>
+            <button class="btn btn-secondary ms-2" type="submit"><i class="bi bi-search"></i></button>
+            
+        </form>
+
+        <div class="text-center mb-3">
+            <a href="{% url 'exportar_inventario_general' %}" class="btn btn-success btn-sm" id="export">
+                <i class="bi bi-filetype-xlsx"></i> Inventario General Heavens xlsx
+            </a>
+        </div>
+    </div>
+    <div class="container-fluid">
+            {% render_table table %}
+        </div>
+{% endblock %}

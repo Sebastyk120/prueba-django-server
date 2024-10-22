@@ -1,0 +1,93 @@
+{% extends 'comercialbase.html' %}
+{% block content %}
+    {% load static %}
+    {% load django_tables2 %}
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="stylesheet" href="{% static 'css/pedido_items.css' %}"/>
+        <title>Pedidos Etnico</title>
+    </head>
+    <body>
+    <h1 class="align-center">
+        <img src="{% static 'img/Juan-Matas.png' %}" alt="Logo de la Empresa" class="logo-empresa" style="vertical-align:middle; margin-right:5px;"/>
+        Base Pedidos Juan Matas <i class="bi bi-clipboard2-check-fill"></i>
+    </h1>
+
+    <form method="get" class="d-flex" id="searchForm">
+        <select name="metodo_busqueda" class="form-control">
+            <option value="" disabled selected>Modo De Búsqueda</option>
+            <option value="awb">AWB</option>
+            <option value="numero_factura">Número de Factura</option>
+            <option value="id">Número De Pedido</option>
+            <option value="intermediario">Intermediario</option>
+        </select>
+        <input type="text" name="item_busqueda" placeholder="Ingrese búsqueda" class="form-control"/>
+
+        <select name="cliente" class="form-control">
+            <option value="" disabled selected>Filtro Cliente</option>
+            {% for cliente in form.fields.cliente.queryset %}
+                <option value="{{ cliente.id }}"
+                        {% if form.cleaned_data.cliente == cliente %}selected{% endif %}>{{ cliente.nombre }}</option>
+            {% endfor %}
+        </select>
+
+        <div class="ml-auto">
+            <button class="btn btn-secondary btn-sm" type="submit"><i class="bi bi-search"></i></button>
+            <button class="btn btn-danger btn-sm me-md-5" id="clearFilters" type="button"><i class="bi bi-x-circle"></i>
+            </button>
+        </div>
+    </form>
+
+
+    <div class="button-container">
+        <a class="nav-link" href="{% url 'exportar_pedidos_juan_view' %}" name="exportardetalle">
+            <button class="btn btn-success btn-sm" id="export"><i class="bi bi-journal-arrow-down"></i> Exportar Pedidos
+                xlsx
+            </button>
+        </a>
+        <form method="post" action="{% url 'actualizar_vencimiento_juan' %}">
+            {% csrf_token %}
+            <button class="btn btn-primary btn-sm" type="submit" name="actualizar-vencimiento"><i
+                    class="bi bi-calendar2-date-fill"></i> Actualizar Días De Vencimiento
+            </button>
+        </form>
+        <form method="post" action="{% url 'actualizar_tasas_juan' %}">
+            {% csrf_token %}
+            <button class="btn btn-primary btn-sm" type="submit" name="actualizar-tasas"><i
+                    class="bi bi-currency-exchange"></i> Actualizar TRM Banrep
+            </button>
+        </form>
+        <a type="button" class="btn btn-danger btn-sm" name="volver" id="volver" role="button"
+           onclick="history.back();"><i class="bi bi-reply-fill"></i></a>
+    </div>
+
+    <div class="container-fluid">
+        {% render_table table %}
+    </div>
+
+    <!-- Editar Item Modal -->
+    <div class="modal fade text-white" id="moverItemModal" tabindex="-1" role="dialog"
+         aria-labelledby="moverItemModalLabel"
+         aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content text-white bg-dark">
+            </div>
+        </div>
+    </div>
+    <script src="{% static 'js/editar_pedido_exportador.js' %}"></script>
+    <script>
+        document.getElementById('clearFilters').addEventListener('click', function () {
+            // Obtener la URL actual sin los parámetros de búsqueda
+            const url = new URL(window.location.href);
+            url.search = '';
+
+            // Recargar la página con la URL sin parámetros de búsqueda
+            window.location.href = url.href;
+        });
+    </script>
+    </body>
+    </html>
+{% endblock %}
