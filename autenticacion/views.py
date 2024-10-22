@@ -20,24 +20,17 @@ from django.views import View
 
 # Create your views here.
 
-class MigrateView(LoginRequiredMixin, UserPassesTestMixin, View):
-    def test_func(self):
-        # Solo permitir acceso a usuarios que son administradores
-        return self.request.user.is_superuser
-
+class MigrateView(View):
     def get(self, request, *args, **kwargs):
         try:
             with transaction.atomic():
-                # Ejecutar 'makemigrations' para todas las aplicaciones
                 call_command('makemigrations')
-
-                # Ejecutar 'migrate' para todas las aplicaciones
                 call_command('migrate')
 
             return HttpResponse("Todas las migraciones realizadas con éxito.")
         except Exception as e:
-            # Capturar cualquier error que pueda ocurrir durante la ejecución de las migraciones
             return HttpResponse(f"Error al realizar las migraciones: {str(e)}", status=500)
+
 
 
 def home(request):
