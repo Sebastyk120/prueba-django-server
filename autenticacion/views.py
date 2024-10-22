@@ -1,8 +1,11 @@
+import itertools
 import os
 import tempfile
 import io
 import json
 from datetime import datetime
+
+from django.apps import apps
 from django.contrib import messages
 from django.contrib.admin.views.decorators import user_passes_test
 from django.contrib.auth import login, authenticate, logout
@@ -13,24 +16,32 @@ from django.contrib.auth.models import User
 from django.contrib.auth.views import PasswordResetView
 from django.db import IntegrityError, transaction
 from django.core.management import call_command
-from django.http import HttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
 from django.shortcuts import render, redirect
+from django.utils.timezone import now
 from django.views import View
 
 
 # Create your views here.
 
-class MigrateView(View):
+class MigrateView(LoginRequiredMixin, UserPassesTestMixin, View):
+    def test_func(self):
+        # Solo permitir acceso a usuarios que son administradores
+        return self.request.user.is_superuser
+
     def get(self, request, *args, **kwargs):
         try:
             with transaction.atomic():
+                # Ejecutar 'makemigrations' para todas las aplicaciones
                 call_command('makemigrations')
+
+                # Ejecutar 'migrate' para todas las aplicaciones
                 call_command('migrate')
 
             return HttpResponse("Todas las migraciones realizadas con éxito.")
         except Exception as e:
+            # Capturar cualquier error que pueda ocurrir durante la ejecución de las migraciones
             return HttpResponse(f"Error al realizar las migraciones: {str(e)}", status=500)
-
 
 
 def home(request):
@@ -88,46 +99,41 @@ class CustomPasswordResetView(PasswordResetView):
         return context
 
 
+def chunked_models(models, size=3):
+    """Divide la lista de modelos en grupos del tamaño especificado."""
+    it = iter(models)
+    for first in it:
+        yield list(itertools.chain([first], itertools.islice(it, size - 1)))
+
+def stream_backup():
+    """Genera los backups en grupos de modelos."""
+    # Obtener todos los modelos registrados en Django
+    all_models = apps.get_models()
+    # Dividir en grupos de 3 modelos
+    for model_group in chunked_models(all_models, size=3):
+        output = io.StringIO()
+        model_names = [model._meta.label for model in model_group]
+        call_command('dumpdata', *model_names, stdout=output)
+        yield output.getvalue()
+
 class BackupDataView(View):
     def get(self, request, *args, **kwargs):
         # Renderizar la plantilla con el botón para descargar
         return render(request, 'backup.html')
 
     def post(self, request, *args, **kwargs):
-        # Crear un archivo temporal para almacenar el backup
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as temp_file:
-            try:
-                # Usar StringIO para capturar la salida de dumpdata
-                output = io.StringIO()
-                # Obtener la lista de todos los modelos en la aplicación
-                from django.apps import apps
-                models = apps.get_models()
-                # Construir la lista de modelos a excluir que contienen "historical"
-                exclude_models = [model._meta.label_lower for model in models if
-                                  'historical' in model._meta.label_lower]
-                # Excluir los modelos históricos durante la exportación
-                call_command('dumpdata', exclude=exclude_models, stdout=output)
-                temp_file.write(output.getvalue().encode('utf-8'))
-                temp_file_name = temp_file.name
-            except Exception as e:
-                return HttpResponse(f'Error during backup: {e}', content_type='text/plain')
-
-        # Obtener la fecha y hora actual para incluirla en el nombre del archivo
-        current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        current_time = now().strftime("%Y-%m-%d_%H-%M-%S")
         filename = f"copia_heavens_{current_time}.json"
 
-        # Leer el contenido del archivo temporal
-        with open(temp_file_name, 'rb') as backup_file:
-            response = HttpResponse(backup_file.read(), content_type='application/json')
-            response['Content-Disposition'] = f'attachment; filename="{filename}"'
-
-        # Eliminar el archivo temporal después de la respuesta
-        os.remove(temp_file_name)
+        # Usar StreamingHttpResponse para transmitir los datos en lugar de cargarlos todos a la vez
+        response = StreamingHttpResponse(stream_backup(), content_type='application/json')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 
 
 class RestoreDataView(View):
     def post(self, request, *args, **kwargs):
+        # Verificar si el archivo ha sido cargado
         if 'backup_file' not in request.FILES:
             return HttpResponse('No file uploaded', content_type='text/plain')
 
@@ -139,15 +145,21 @@ class RestoreDataView(View):
                 temp_file.write(chunk)
             temp_file_name = temp_file.name
 
-        # Leer el contenido del archivo temporal
+        # Leer el contenido del archivo temporal para verificar integridad
         try:
             with open(temp_file_name, 'r', encoding='utf-8') as file:
-                data = json.load(file)
+                json.load(file)  # Solo intentamos cargar para validar el JSON
 
-            # Restaurar los datos usando loaddata
-            call_command('loaddata', temp_file_name)
+        except json.JSONDecodeError:
             os.remove(temp_file_name)
+            return HttpResponse('Invalid JSON format in backup file', content_type='text/plain')
+
+        # Si es válido, intentamos restaurar los datos usando loaddata
+        try:
+            call_command('loaddata', temp_file_name)
+            os.remove(temp_file_name)  # Eliminar el archivo temporal tras la restauración exitosa
             return HttpResponse('Data restored successfully', content_type='text/plain')
+
         except Exception as e:
             os.remove(temp_file_name)
             return HttpResponse(f'Error during data restoration: {e}', content_type='text/plain')
