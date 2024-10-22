@@ -151,11 +151,11 @@ CRISPY_TEMPLATE_PACK = "bootstrap5"
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 
 ALLOWED_HOSTS = [
-    'heavens-server.up.railway.app', 'localhost',
+    'prueba-heavens-server.up.railway.app', 'localhost',
 ]
 CSRF_TRUSTED_ORIGINS = ["https://*.up.railway.app"]
-CSRF_ALLOWED_ORIGINS = ["https://heavens-server.up.railway.app"]
-CORS_ORIGINS_WHITELIST = ["https://heavens-server.up.railway.app"]
+CSRF_ALLOWED_ORIGINS = ["https://prueba-heavens-server.railway.app"]
+CORS_ORIGINS_WHITELIST = ["https://prueba-heavens-server.railway.app"]
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 
 # CONFIGURACIÓN MAIL:
