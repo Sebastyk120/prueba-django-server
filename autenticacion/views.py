@@ -99,22 +99,23 @@ class CustomPasswordResetView(PasswordResetView):
         return context
 
 
-def chunked_models(models, size=3):
-    """Divide la lista de modelos en grupos del tamaño especificado."""
-    it = iter(models)
-    for first in it:
-        yield list(itertools.chain([first], itertools.islice(it, size - 1)))
-
 def stream_backup():
-    """Genera los backups en grupos de modelos."""
+    """Genera un backup de todos los modelos en un solo bloque."""
     # Obtener todos los modelos registrados en Django
     all_models = apps.get_models()
-    # Dividir en grupos de 3 modelos
-    for model_group in chunked_models(all_models, size=3):
-        output = io.StringIO()
-        model_names = [model._meta.label for model in model_group]
-        call_command('dumpdata', *model_names, stdout=output)
-        yield output.getvalue()
+
+    # Crear un StringIO para capturar la salida de dumpdata
+    output = io.StringIO()
+
+    # Obtener los nombres de todos los modelos
+    model_names = [model._meta.label for model in all_models]
+
+    # Usar dumpdata para generar el backup de todos los modelos a la vez
+    call_command('dumpdata', *model_names, stdout=output)
+
+    # Devolver el contenido del backup
+    yield output.getvalue()
+
 
 class BackupDataView(View):
     def get(self, request, *args, **kwargs):
@@ -133,7 +134,6 @@ class BackupDataView(View):
 
 class RestoreDataView(View):
     def post(self, request, *args, **kwargs):
-        # Verificar si el archivo ha sido cargado
         if 'backup_file' not in request.FILES:
             return HttpResponse('No file uploaded', content_type='text/plain')
 
@@ -145,21 +145,15 @@ class RestoreDataView(View):
                 temp_file.write(chunk)
             temp_file_name = temp_file.name
 
-        # Leer el contenido del archivo temporal para verificar integridad
+        # Leer el contenido del archivo temporal
         try:
             with open(temp_file_name, 'r', encoding='utf-8') as file:
-                json.load(file)  # Solo intentamos cargar para validar el JSON
+                data = json.load(file)
 
-        except json.JSONDecodeError:
-            os.remove(temp_file_name)
-            return HttpResponse('Invalid JSON format in backup file', content_type='text/plain')
-
-        # Si es válido, intentamos restaurar los datos usando loaddata
-        try:
+            # Restaurar los datos usando loaddata
             call_command('loaddata', temp_file_name)
-            os.remove(temp_file_name)  # Eliminar el archivo temporal tras la restauración exitosa
+            os.remove(temp_file_name)
             return HttpResponse('Data restored successfully', content_type='text/plain')
-
         except Exception as e:
             os.remove(temp_file_name)
             return HttpResponse(f'Error during data restoration: {e}', content_type='text/plain')
